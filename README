@@ -1,0 +1,51 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=2634
+
+DESCRIPTION
+The mappings, command and operator provided by this plugin search a range or
+the entire buffer for a pattern (defaulting to the current search pattern),
+and print a summary of the number of occurrences above, below and on the
+current line, e.g.: 
+    1 match after cursor in this line, 8 following, 2 in previous lines; total 10 for /\<SearchPosition\>/ 
+    5 matches in this fold, 9 before, 6 following; total 21 for /endif/ 
+    On sole match in this line, 40 in following lines for /let/ 
+    :144,172 7 matches in this fold for /let/ 
+
+This provides better orientation in a buffer without having to first jump from
+search result to search result. 
+
+MOTIVATION
+In its simplest implementation
+    :nnoremap <A-n> :%s///gn<CR>
+    41 matches on 17 lines
+prints the number of matches for the current search pattern. This plugin
+builds on top of this by providing more context with regards to the current
+cursor position plus additional information. 
+
+This plugin is similar to IndexedSearch.vim (vimscript#1682) by Yakov
+Lerner. 
+
+USAGE
+:[range]SearchPosition [{pattern}]
+			Show position of the search results for {pattern} (or
+			the current search pattern (@/) if {pattern} is
+			omitted). All lines in [range] (or the entire buffer
+			if omitted) are considered, and the number of matches
+			in relation to the current cursor position is echoed
+			to the command line. 
+
+<Leader><A-n>{motion}	Show position for the current search pattern in the
+			lines covered by {motion}. 
+[count]<A-n>		Show position for the current search pattern in the
+			entire buffer, or [count] following lines. 
+{Visual}<A-n>		Show position for the current search pattern in the
+			selected lines. 
+
+[count]<A-m>		Show position for the whole word under the cursor in the
+			entire buffer, or [count] following lines. 
+			Only whole keywords are searched for, like with the
+			|star| command. 
+[count]g<A-m>		Show position for the word under the cursor in the
+			entire buffer, or [count] following lines. 
+			Also finds contained matches, like |gstar|. 
+{Visual}<A-m>		Show position for the selected text in the entire
+			buffer. 
