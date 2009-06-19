@@ -10,6 +10,11 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   1.01.006	19-Jun-2009	Using :keepjumps to avoid that the :substitute
+"				command in s:GetMatchesCnt() clobbers the
+"				jumplist. 
+"   1.01.005	18-Jun-2009	Replaced temporary mark z with mark " and using
+"				g` command to avoid clobbering jumplist. 
 "   1.00.004	15-May-2009	Added mappings for <cword> / selected word. 
 "				A literal pattern (like <cword>) is now
 "				converted to a regexp internally and included in
@@ -24,7 +29,7 @@
 "				Correcting wrong "1 matches" grammar. 
 "	001	07-Aug-2008	file creation
 
-" Avoid installing twice or when in unsupported VIM version. 
+" Avoid installing twice or when in unsupported Vim version. 
 if exists('g:loaded_SearchPosition') || (v:version < 700)
     finish
 endif
@@ -48,7 +53,7 @@ function! s:GetMatchesCnt( range, pattern )
 
     redir => l:matches
     try
-	silent execute a:range . 's/' . escape(a:pattern, '/') . '//gn'
+	silent execute 'keepjumps' a:range . 's/' . escape(a:pattern, '/') . '//gn'
 	redir END
 	let l:matchesCnt = matchstr( l:matches, '\n\zs\d\+' )
     catch /^Vim\%((\a\+)\)\=:E486/ " Pattern not found
@@ -135,13 +140,17 @@ function! s:Report( line1, line2, pattern, isLiteral, evaluation )
     echohl None
 
     if ! empty(l:pattern)
+	" Assumption: The evaluation message only contains printable ASCII
+	" characters; we can thus simple use strlen() to determine the number of
+	" occupied virtual columns. Otherwise,
+	" EchoWithoutScrolling#DetermineVirtColNum() could be used. 
 	echon EchoWithoutScrolling#Truncate( ' for ' . l:pattern, (strlen(l:range) + strlen(a:evaluation)) )
     endif
 endfunction
 function! s:SearchPosition( line1, line2, pattern, isLiteral )
     let l:startLine = (a:line1 ? max([a:line1, 1]) : 1)
     let l:endLine = (a:line2 ? min([a:line2, line('$')]) : line('$'))
-    " If the end of range is in a closed fold, VIM processes all lines inside
+    " If the end of range is in a closed fold, Vim processes all lines inside
     " the fold, even when '.' or a fixed line number has been specified. We
     " correct the end line merely for output cosmetics, as the calculation is
     " not affected by this. 
@@ -232,10 +241,10 @@ function! s:SearchPositionOperator( type )
     " of the range, so if the motion goes backward, the cursor will move. For
     " this report-only command this is not desired, so we use a mark to pin the
     " cursor down. 
-    normal! `z
+    normal! g`"
     call s:SearchPosition(line("'["), line("']"), '', 0)
 endfunction
-nnoremap <Plug>SearchPositionOperator mz:set opfunc=<SID>SearchPositionOperator<CR>g@
+nnoremap <Plug>SearchPositionOperator m":set opfunc=<SID>SearchPositionOperator<CR>g@
 if ! hasmapto('<Plug>SearchPositionOperator', 'n')
     nmap <silent> <Leader><A-n> <Plug>SearchPositionOperator
 endif

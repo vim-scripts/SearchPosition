@@ -151,8 +151,9 @@ function! EchoWithoutScrolling#TruncateTo( text, length )
 "   none
 "* INPUTS:
 "   a:text	Text which may be truncated to fit. 
-"* RETURN VALUES: 
 "   a:length	Maximum virtual columns for a:text. 
+"* RETURN VALUES: 
+"   None. 
 "*******************************************************************************
     if a:length <= 0
 	return ''
@@ -243,6 +244,9 @@ function! EchoWithoutScrolling#TranslateLineBreaks( text )
 "   advantage over indiscriminate preprocessing with strtrans()). However, :echo
 "   observes embedded line breaks (in contrast to :echomsg), which would mess up
 "   a single-line message that contains embedded \n = <CR> = ^M or <LF> = ^@. 
+"
+"   For the :echomsg and :echoerr commands, neither strtrans() nor this function
+"   are necessary; all translation is done by the built-in command. 
 "
 "* LIMITATIONS:
 "   When :echo'd, the translated line breaks are not rendered with the typical
