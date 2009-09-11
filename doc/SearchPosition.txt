@@ -115,6 +115,10 @@ IDEAS							*SearchPosition-ideas*
 ==============================================================================
 HISTORY						      *SearchPosition-history*
 
+1.02	11-Sep-2009
+BUG: Cannot set mark " in Vim 7.0 and 7.1; using mark z instead. This only
+affected the <Leader><A-n>{motion} command. 
+
 1.01	19-Jun-2009
 The jumplist is not clobbered anymore by the :SearchPosition command. 
 
