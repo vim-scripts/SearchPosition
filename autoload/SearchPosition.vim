@@ -11,6 +11,10 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   1.11.002	02-Jun-2010	Appended "; total N" to evaluations that
+"				excluded the match on the cursor from the
+"				"overall" count, as it was misleading what
+"				"overall" meant in this context. 
 "   1.10.001	08-Jan-2010	Moved functions from plugin to separate autoload
 "				script.
 "				file creation
@@ -32,6 +36,21 @@ function! s:GetMatchesCnt( range, pattern )
 
     return l:matchesCnt
 endfunction
+" The position in the key is a boolean (0/1) whether there are any matches. 
+" The placeholder {N} will be filled with the actual number, where N is: 
+" 1: matches before line, 2: matches current line, 3: matches after line,
+" 4: before cursor, 5: exact on cursor, 6: after cursor in current line
+"
+" Terminology: 
+" "overall" is used when all matches are limited to a certain partition of the
+" range, e.g. all before the cursor (and thus none on or after the cursor). 
+" "total" is used when there's no such partition; matches are scattered
+" throughout the range. 
+" Example: 
+"6 = /4
+"   2 | 1
+"     2/ = 3
+"   2 matches before and 1 after cursor in this line, 6 and 3 overall; total 9
 let s:evaluation = {
 \   '000000': 'No matches', 
 \   '001000': '{3} matches after this line', 
@@ -46,7 +65,7 @@ let s:evaluation = {
 \   '011000': '{2} matches in this fold, {3} following; total {2+3}', 
 \   '011001': '{6} matches after cursor in this line, {3+6} overall', 
 \   '011010': 'On sole match in this line, {3} in following lines', 
-\   '011011': 'On first match, {6} following in line, {3+6} overall', 
+\   '011011': 'On first match, {6} following in line, {3+6} overall; total {2+3}', 
 \   '011100': '{4} matches before cursor in this line, {3} in following lines; total {2+3}', 
 \   '011101': '{4} matches before and {6} after cursor in this line, {3} in following lines; total {2+3}', 
 \   '011110': 'On last match of {4+5} in this line, {3} in following lines; total {2+3}', 
@@ -59,7 +78,7 @@ let s:evaluation = {
 \   '110011': 'On first match of {5+6} in this line, {1} in previous lines; total {1+2}', 
 \   '110100': '{4} matches before cursor in this line, {1+4} overall', 
 \   '110101': '{4} matches before and {6} after cursor in this line, {1} in previous lines; total {1+2}', 
-\   '110110': 'On last match, {4} previous in line, {1+4} overall', 
+\   '110110': 'On last match, {4} previous in line, {1+4} overall; total {1+2}', 
 \   '110111': 'On match, {4+5+6} in this line, {1} in previous lines; total {1+2}', 
 \   '111000': '{2} matches in this fold, {1} before, {3} following; total {1+2+3}', 
 \   '111001': '{6} matches after cursor in this line, {3+6} following, {1} in previous lines; total {1+2+3}', 

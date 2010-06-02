@@ -123,6 +123,11 @@ IDEAS							*SearchPosition-ideas*
 ==============================================================================
 HISTORY						      *SearchPosition-history*
 
+1.11	02-Jun-2010
+Appended "; total N" to evaluations that excluded the match on the cursor from
+the "overall" count, as it was misleading what "overall" meant in this
+context.
+
 1.10	08-Jan-2010
 - Moved functions from plugin to separate autoload script.
 - BUG: Wrong reporting of additional occurrences when the current line is
