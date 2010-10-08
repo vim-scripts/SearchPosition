@@ -129,6 +129,11 @@ IDEAS							*SearchPosition-ideas*
 ==============================================================================
 HISTORY						      *SearchPosition-history*
 
+1.13	08-Oct-2010
+- BUG: The previous fix for the incorrect reporting of sole match in folded
+  line was susceptible to non-local matches when current line is the first
+  line. 
+
 1.12	08-Oct-2010
 - BUG: Visual mode <A-m> /Plug>SearchPositionCword mapping on multi-line
   selection searched for ^@, not the newline character \n. 
