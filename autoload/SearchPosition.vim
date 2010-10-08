@@ -11,6 +11,18 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS 
+"   1.12.003	08-Oct-2010	Using SearchPosition#SavePosition() instead of
+"				(Vim version-dependent) mark to keep the cursor
+"				at the position where the operator was invoked
+"				(only necessary with a backward {motion}). 
+"				BUG: Incorrect reporting of sole match in folded
+"				line when the current line is empty and the
+"				pattern starts matching a newline character.
+"				The reason is that search() doesn't match a
+"				pattern that starts with a newline character on
+"				an empty line. We have to move to the last
+"				character on the line before the empty line to
+"				achieve the match. 
 "   1.11.002	02-Jun-2010	Appended "; total N" to evaluations that
 "				excluded the match on the cursor from the
 "				"overall" count, as it was misleading what
@@ -235,6 +247,35 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
 		throw 'ASSERT: false'
 	    endif 
 	endwhile
+
+	" search() doesn't match a pattern that starts with a newline character
+	" on an empty line. We have to move to the last character on the line
+	" before the empty line to achieve the match. 
+	"
+	" Detect this special case when the current line is empty and there were
+	" no matches. Without this special handling, SearchPosition would deduce
+	" that the current line is inside a fold. 
+	if empty(getline(l:cursorLine)) && (l:before + l:exact + l:after) == 0
+	    " Moving to the previous character must be handled differently when
+	    " on the first line; in that case, we need wrap-around enabled. 
+	    let [l:adaptionMovement, l:searchFlags, l:searchStopLine] =
+	    \	(l:cursorLine == 1 ?
+	    \	    ['G$', 'w', 0] :
+	    \	    ['k$', 'c', l:cursorLine]
+	    \	)
+	    execute 'normal!' l:adaptionMovement
+	    if search(a:pattern, l:searchFlags, l:searchStopLine)
+		" On an empty line, the cursor is usually on the newline
+		" character, but it can be after it (= match before cursor) if
+		" 'virtualedit' is set. 
+		if l:cursorVirtCol == 1
+		    let l:exact += 1
+		else
+		    let l:before += 1
+		endif
+	    endif
+	endif
+
 	call setpos('.', l:save_cursor)
 "****D echomsg '****' l:before '/' l:exact '/' l:after
     endif
@@ -242,16 +283,19 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
     call s:Report( l:startLine, l:endLine, a:pattern, s:Evaluate( [l:matchesBefore, l:matchesCurrent, l:matchesAfter, l:before, l:exact, l:after] ) )
 endfunction
 
+function! SearchPosition#SavePosition()
+    let s:savePositionBeforeOperator = getpos('.')
+endfunction
 function! SearchPosition#Operator( type )
     " After the custom operator, the cursor will be positioned at the beginning
     " of the range, so if the motion goes backward, the cursor will move. For
-    " this report-only command this is not desired, so we use a mark to pin the
-    " cursor down. 
-    if v:version < 702
-	normal! g`z
-    else
-	normal! g`"
+    " this report-only command this is not desired, so we use the saved position
+    " to pin the cursor down. 
+    if getpos('.') != s:savePositionBeforeOperator
+	call setpos('.', s:savePositionBeforeOperator)
     endif
+    unlet s:savePositionBeforeOperator
+
     call SearchPosition#SearchPosition(line("'["), line("']"), '', 0)
 endfunction
 

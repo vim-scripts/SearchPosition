@@ -3,9 +3,10 @@
 		      SEARCH POSITION    by Ingo Karkat
 							  *SearchPosition.vim*
 description			|SearchPosition-description|
-usage	    			|SearchPosition-usage|
-installation   			|SearchPosition-installation|
-configuration  			|SearchPosition-configuration|
+usage				|SearchPosition-usage|
+installation			|SearchPosition-installation|
+configuration			|SearchPosition-configuration|
+limitations			|SearchPosition-limitations|
 known problems			|SearchPosition-known-problems|
 todo				|SearchPosition-todo|
 history				|SearchPosition-history|
@@ -114,6 +115,11 @@ omitted from the message; by default, both are included in the message text: >
     let g:SearchPosition_ShowPattern = 1
 <
 ==============================================================================
+LIMITATIONS					  *SearchPosition-limitations*
+
+- The summary always includes full lines, even if {motion} or the visual
+  selection cover only parts of lines. 
+
 KNOWN PROBLEMS				       *SearchPosition-known-problems*
 
 TODO							 *SearchPosition-todo*
@@ -122,6 +128,15 @@ IDEAS							*SearchPosition-ideas*
 
 ==============================================================================
 HISTORY						      *SearchPosition-history*
+
+1.12	08-Oct-2010
+- BUG: Visual mode <A-m> /Plug>SearchPositionCword mapping on multi-line
+  selection searched for ^@, not the newline character \n. 
+- BUG: Incorrect reporting of sole match in folded line when the current line
+  is empty and the pattern starts matching a newline character.
+- Using SearchPosition#SavePosition() instead ofVim version-dependent) mark to
+  keep the cursor at the position where the operator was invokedonly necessary
+  with a backward {motion}). 
 
 1.11	02-Jun-2010
 Appended "; total N" to evaluations that excluded the match on the cursor from
@@ -154,7 +169,7 @@ First published version.
 Started development. 
 
 ==============================================================================
-Copyright: (C) 2009-2010 by Ingo Karkat
+Copyright: (C) 2009-2010 Ingo Karkat
 The VIM LICENSE applies to this script; see |copyright|. 
 
 Maintainer:	Ingo Karkat <ingo@karkat.de>
