@@ -40,8 +40,7 @@ prints the number of matches for the last search pattern. This plugin
 builds on top of this by providing more context with regards to the current
 cursor position plus additional information.
 
-This plugin is similar to IndexedSearch.vim (vimscript#1682) by Yakov
-Lerner.
+This plugin is similar to IndexedSearch.vim (vimscript #1682) by Yakov Lerner.
 
 ==============================================================================
 USAGE							*SearchPosition-usage*
@@ -116,12 +115,16 @@ omitted from the message; by default, both are included in the message text: >
     let g:SearchPosition_ShowPattern = 1
 <
 					     *g:SearchPosition_ShowMatchRange*
-			    *g:SearchPosition_MatchRangeShowRelativeThreshold*
-The report also shows in which range the matches fall. For locations close to
-the cursor and the end of the buffer, a relative notation is used. You can
-influence both via: >
+The report also shows in which range the matches fall. To turn this off: >
     let g:SearchPosition_ShowMatchRange = 1
+<			    *g:SearchPosition_MatchRangeShowRelativeThreshold*
+			 *g:SearchPosition_MatchRangeShowRelativeEndThreshold*
+If the range falls entirely into the lines that are shown in the current
+window, a relative range is used. To prefer a fixed threshold, or to turn this
+off, use: >
     let g:SearchPosition_MatchRangeShowRelativeThreshold = 10
+The relative threshold at the end is determined via: >
+    let g:SearchPosition_MatchRangeShowRelativeEndThreshold = 10
 <
 
 If you want to use different mappings, map your keys to the
@@ -148,6 +151,24 @@ IDEAS							*SearchPosition-ideas*
 
 ==============================================================================
 HISTORY						      *SearchPosition-history*
+
+1.21	08-Mar-2015
+- ENH: Show relative range when the lines are shown in the current window with
+  a new default configuration value of "visible" for
+  g:SearchPosition_MatchRangeShowRelativeThreshold. Use separate
+  g:SearchPosition_MatchRangeShowRelativeEndThreshold for threshold at the
+  end.
+- FIX: After "Special atoms have distorted the tally" warning, an additional
+  stray (last actual) error is repeated. s:Report() also needs to return 1
+  after such warning.
+- BUG: "Special atoms have distorted the tally" warning instead of "No
+  matches" when on first line. Must not allow previous matching line when that
+  is identical to 0, the return value of search() when it fails.
+- BUG: "Special atoms have distorted the tally" when doing
+  :SearchPosition/\n\n/ on empty line. The special case for \n matching is
+  actually more complex; need to also ensure that the match doesn't lie
+  completely on the previous line, and retry without the "c" search flag if it
+  does.
 
 1.20	19-Jun-2014
 - Abort commands and mappings on error.
@@ -211,7 +232,7 @@ First published version.
 Started development.
 
 ==============================================================================
-Copyright: (C) 2009-2014 Ingo Karkat
+Copyright: (C) 2009-2015 Ingo Karkat
 The VIM LICENSE applies to this plugin; see |copyright|.
 
 Maintainer:	Ingo Karkat <ingo@karkat.de>

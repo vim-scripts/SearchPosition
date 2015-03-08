@@ -4,13 +4,36 @@
 "   - ingo/avoidprompt.vim autoload script
 "   - ingo/compat.vim autoload script
 "   - ingo/regexp.vim autoload script
+"   - ingo/window/dimensions.vim autoload script
 "
-" Copyright: (C) 2008-2014 Ingo Karkat
+" Copyright: (C) 2008-2015 Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'.
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS
+"   1.21.011	11-Feb-2015	FIX: After "Special atoms have distorted the
+"				tally" warning, an additional stray (last
+"				actual) error is repeated. s:Report() also needs
+"				to return 1 after such warning.
+"				BUG: "Special atoms have distorted the tally"
+"				warning instead of "No matches" when on first
+"				line. Must not allow previous matching line when
+"				that is identical to 0, the return value of
+"				search() when it fails.
+"				BUG: "Special atoms have distorted the tally"
+"				when doing :SearchPosition/\n\n/ on empty line.
+"				The special case for \n matching is actually
+"				more complex; need to also ensure that the match
+"				doesn't lie completely on the previous line, and
+"				retry without the "c" search flag if it does.
+"   1.21.010	30-Jun-2014	ENH: Show relative range when the lines are
+"				shown in the current window with a new default
+"				configuration value of "visible" for
+"				g:SearchPosition_MatchRangeShowRelativeThreshold.
+"				Use separate
+"				g:SearchPosition_MatchRangeShowRelativeEndThreshold
+"				for threshold at the end.
 "   1.20.009	30-May-2014	ENH: Also show range that the matches fall into;
 "				locations close to the current line in relative form.
 "   1.16.008	05-May-2014	Abort commands and mappings on error.
@@ -67,7 +90,7 @@ function! s:GetMatchesStats( range, pattern )
 	silent execute 'keepjumps' a:range . 's/' . escape(a:pattern, '/') . '/\=s:RecordRange(l:range)/gn'
 	redir END
 	let l:matchesCnt = str2nr(matchstr( l:matches, '\n\zs\d\+' ))
-    catch /^Vim\%((\a\+)\)\=:E486/ " Pattern not found
+    catch /^Vim\%((\a\+)\)\=:E486:/ " Pattern not found
     finally
 	redir END
     endtry
@@ -145,17 +168,17 @@ function! s:Evaluate( matchResults )
     let l:evaluation = substitute(l:evaluation, '{\%(\d\|+\)\+}', '\=s:ResolveParameters(a:matchResults, submatch(0))', 'g')
     return [1, substitute(l:evaluation, '\C1 matches' , '1 match', 'g')]
 endfunction
-function! s:TranslateLocation( lnum, isShowAbsoluteNumberForCurrentLine )
+function! s:TranslateLocation( lnum, isShowAbsoluteNumberForCurrentLine, firstVisibleLnum, lastVisibleLnum )
     if a:lnum == line('.')
 	return (a:isShowAbsoluteNumberForCurrentLine ? a:lnum : '.')
     elseif a:lnum == line('$')
 	return '$'
     elseif a:lnum == 1
 	return '1'
-    elseif ingo#compat#abs(a:lnum - line('.')) <= g:SearchPosition_MatchRangeShowRelativeThreshold
+    elseif a:lnum >= a:firstVisibleLnum && a:lnum <= a:lastVisibleLnum
 	let l:offset = a:lnum - line('.')
 	return '.' . (l:offset < 0 ? l:offset : '+' . l:offset)
-    elseif line('$') - a:lnum <= g:SearchPosition_MatchRangeShowRelativeThreshold
+    elseif line('$') - a:lnum <= g:SearchPosition_MatchRangeShowRelativeEndThreshold
 	return '$-' . (line('$') - a:lnum)
     else
 	return a:lnum
@@ -168,11 +191,15 @@ function! s:EvaluateMatchRange( line1, line2, firstMatchLnum, lastMatchLnum )
 
     let l:isFallsOnCurrentLine = (a:firstMatchLnum == line('.') || a:lastMatchLnum == line('.'))
 
-    let l:firstLocation = s:TranslateLocation(a:firstMatchLnum, l:isFallsOnCurrentLine)
+    let [l:firstVisibleLnum, l:lastVisibleLnum] = (g:SearchPosition_MatchRangeShowRelativeThreshold ==# 'visible' ?
+    \   ingo#window#dimensions#DisplayedLines() :
+    \   [line('.') - g:SearchPosition_MatchRangeShowRelativeThreshold, line('.') + g:SearchPosition_MatchRangeShowRelativeThreshold]
+    \)
+    let l:firstLocation = s:TranslateLocation(a:firstMatchLnum, l:isFallsOnCurrentLine, l:firstVisibleLnum, l:lastVisibleLnum)
     if a:firstMatchLnum == a:lastMatchLnum
 	return (a:firstMatchLnum == line('.') ? '' : printf(' at %s', l:firstLocation))
     endif
-    let l:lastLocation = s:TranslateLocation(a:lastMatchLnum, l:isFallsOnCurrentLine)
+    let l:lastLocation = s:TranslateLocation(a:lastMatchLnum, l:isFallsOnCurrentLine, l:firstVisibleLnum, l:lastVisibleLnum)
     return printf(' within %s,%s', l:firstLocation, l:lastLocation)
 endfunction
 function! s:Report( line1, line2, pattern, firstMatchLnum, lastMatchLnum, evaluation )
@@ -223,7 +250,7 @@ function! s:Report( line1, line2, pattern, firstMatchLnum, lastMatchLnum, evalua
     endif
     if ! l:isSuccessful | echohl None | endif
 
-    return l:isSuccessful
+    return 1
 endfunction
 function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
     let l:startLine = (a:line1 ? max([a:line1, 1]) : 1)
@@ -329,13 +356,22 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
 	    \	    ['k$', 'c', l:cursorLine]
 	    \	)
 	    execute 'normal!' l:adaptionMovement
-	    let l:matchLine = search(a:pattern, l:searchFlags, l:searchStopLine)
-	    " Depending on whether the pattern matches only a newline character
-	    " or more after it, the line number is the one before or the current
-	    " line. This check is only needed for a match on the first line, as
-	    " we use a stopline for all other searches that do not need to wrap
-	    " around.
-	    if l:matchLine == l:cursorLine - 1 || l:matchLine == l:cursorLine
+	    let l:matchLnum = search(a:pattern, 'n' . l:searchFlags, l:searchStopLine)
+	    let l:isMatch = 0
+	    if l:matchLnum == l:cursorLine  " This strict check is only needed for a match on the first line, as we use a stopline for all other searches that do not need to wrap around.
+		let l:isMatch = 1
+	    elseif l:matchLnum > 0 &&
+	    \   l:matchLnum == l:cursorLine - 1 &&
+	    \   search(a:pattern, 'ne' . l:searchFlags, l:searchStopLine) == l:cursorLine - 1
+		" The match lies completely on the previous line; not what we
+		" wanted (it should normally end on the current line). This
+		" happens when a:pattern is a single newline. In this case, we
+		" need to disallow matching at the current position (above the
+		" actual current line) by dropping the "c" flag.
+		let l:isMatch = (search(a:pattern, 'n', l:searchStopLine) == l:cursorLine)
+	    endif
+
+	    if l:isMatch
 		" On an empty line, the cursor is usually on the newline
 		" character, but it can be after it (= match before cursor) if
 		" 'virtualedit' is set.
