@@ -3,6 +3,7 @@
 " DEPENDENCIES:
 "   - ingo/avoidprompt.vim autoload script
 "   - ingo/compat.vim autoload script
+"   - ingo/range.vim autoload script
 "   - ingo/regexp.vim autoload script
 "   - ingo/window/dimensions.vim autoload script
 "
@@ -12,6 +13,31 @@
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
 "
 " REVISION	DATE		REMARKS
+"   1.30.015	15-Apr-2015	Tweak s:TranslateLocation() for line 1:  :2
+"				looks better than :.+1 there.
+"				Tweak s:TranslateLocation() for last line and
+"				use :$-N instead of :.-N there.
+"				Tweak s:TranslateLocation() to prefer absolute
+"				numbers over offsets spanning more than half of
+"				the entire buffer.
+"				BUG: Incorrect de-pluralization of "11
+"				match[es]".
+"				Also store the results of
+"				:SearchPositionMultiple in the message history.
+"   1.30.014	14-Apr-2015	Extract s:EchoResult().
+"				Add SearchPosition#SearchPositionMultiple() to
+"				implement :SearchPositionMultiple command.
+"   1.22.013	14-Apr-2015	Also submit the plugin's result message (in
+"				unhighlighted form) to the message history (for
+"				recall and comparison).
+"				Refactoring: Extract s:GetReport() from
+"				s:Report().
+"				Refactoring: Extract s:SearchAndEvaluate() from
+"				SearchPosition#SearchPosition().
+"   1.22.012	16-Mar-2015	BUG: Also need to account for cursor within
+"				closed fold for the start line number, not just
+"				the end. Replace explicit adaptation with
+"				ingo#range#NetStart() / ingo#range#NetEnd().
 "   1.21.011	11-Feb-2015	FIX: After "Special atoms have distorted the
 "				tally" warning, an additional stray (last
 "				actual) error is repeated. s:Report() also needs
@@ -166,7 +192,7 @@ function! s:Evaluate( matchResults )
 
     let l:evaluation = s:evaluation[ l:matchVector ]
     let l:evaluation = substitute(l:evaluation, '{\%(\d\|+\)\+}', '\=s:ResolveParameters(a:matchResults, submatch(0))', 'g')
-    return [1, substitute(l:evaluation, '\C1 matches' , '1 match', 'g')]
+    return [1, substitute(l:evaluation, '\C^1 matches' , '1 match', 'g')]
 endfunction
 function! s:TranslateLocation( lnum, isShowAbsoluteNumberForCurrentLine, firstVisibleLnum, lastVisibleLnum )
     if a:lnum == line('.')
@@ -176,8 +202,16 @@ function! s:TranslateLocation( lnum, isShowAbsoluteNumberForCurrentLine, firstVi
     elseif a:lnum == 1
 	return '1'
     elseif a:lnum >= a:firstVisibleLnum && a:lnum <= a:lastVisibleLnum
+	if line('.') == 1
+	    return a:lnum   " :2 looks better than :.+1
+	endif
+
 	let l:offset = a:lnum - line('.')
-	return '.' . (l:offset < 0 ? l:offset : '+' . l:offset)
+	if ingo#compat#abs(l:offset) > line('$') / 2
+	    return a:lnum   " Prefer absolute numbers over offsets spanning more than half of the entire buffer.
+	endif
+
+	return (line('.') == line('$') ? '$' : '.') . (l:offset < 0 ? l:offset : '+' . l:offset)
     elseif line('$') - a:lnum <= g:SearchPosition_MatchRangeShowRelativeEndThreshold
 	return '$-' . (line('$') - a:lnum)
     else
@@ -202,11 +236,8 @@ function! s:EvaluateMatchRange( line1, line2, firstMatchLnum, lastMatchLnum )
     let l:lastLocation = s:TranslateLocation(a:lastMatchLnum, l:isFallsOnCurrentLine, l:firstVisibleLnum, l:lastVisibleLnum)
     return printf(' within %s,%s', l:firstLocation, l:lastLocation)
 endfunction
-function! s:Report( line1, line2, pattern, firstMatchLnum, lastMatchLnum, evaluation )
+function! s:GetReport( line1, line2, pattern, firstMatchLnum, lastMatchLnum, evaluation )
     let [l:isSuccessful, l:evaluationText] = a:evaluation
-
-    redraw  " This is necessary because of the :redir done earlier.
-    echo ''
 
     let l:range = ''
     let l:matchRange = ''
@@ -220,48 +251,65 @@ function! s:Report( line1, line2, pattern, firstMatchLnum, lastMatchLnum, evalua
 	    endif
 	    if ! empty(l:range)
 		let l:range = ':' . l:range . ' '
-		echon l:range
 	    endif
 	endif
 
 	if g:SearchPosition_ShowMatchRange && a:lastMatchLnum != 0
+	    redraw  " This is necessary because of the :redir done earlier.
 	    let l:matchRange = s:EvaluateMatchRange(a:line1, a:line2, a:firstMatchLnum, a:lastMatchLnum)
 	endif
     endif
 
-    let l:pattern = ''
+    let l:patternMessage = ''
     if g:SearchPosition_ShowPattern
 	let l:pattern = ingo#avoidprompt#TranslateLineBreaks('/' . (empty(a:pattern) ? @/ : escape(a:pattern, '/')) . '/')
-    endif
-
-    execute 'echohl' (l:isSuccessful ?
-    \	empty(g:SearchPosition_HighlightGroup) ? 'None' : g:SearchPosition_HighlightGroup :
-    \	'WarningMsg'
-    \)
-    echon l:evaluationText . l:matchRange
-    if l:isSuccessful | echohl None | endif
-
-    if ! empty(l:pattern)
 	" Assumption: The evaluation message only contains printable ASCII
 	" characters; we can thus simple use strlen() to determine the number of
 	" occupied virtual columns. Otherwise, ingo#compat#strdisplaywidth()
 	" could be used.
-	echon ingo#avoidprompt#Truncate(' for ' . l:pattern, (strlen(l:range) + strlen(l:evaluationText)))
+	let l:patternMessage = ingo#avoidprompt#Truncate(' for ' . l:pattern, (strlen(l:range) + strlen(l:evaluationText)))
     endif
-    if ! l:isSuccessful | echohl None | endif
 
+    return [l:isSuccessful, l:range, l:evaluationText, l:matchRange, l:patternMessage]
+endfunction
+function! s:EchoResult( isSuccessful, range, evaluationText, matchRange, patternMessage )
+    echo ''
+    echon a:range
+    execute 'echohl' (a:isSuccessful ?
+    \	empty(g:SearchPosition_HighlightGroup) ? 'None' : g:SearchPosition_HighlightGroup :
+    \	'WarningMsg'
+    \)
+    echon a:evaluationText . a:matchRange
+    if a:isSuccessful | echohl None | endif
+    echon a:patternMessage
+    if ! a:isSuccessful | echohl None | endif
+endfunction
+function! s:Report( isSuccessful, range, evaluationText, matchRange, patternMessage )
+    echomsg a:range . a:evaluationText . a:matchRange . a:patternMessage
+    redraw
+
+    call s:EchoResult(a:isSuccessful, a:range, a:evaluationText, a:matchRange, a:patternMessage)
     return 1
 endfunction
-function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
-    let l:startLine = (a:line1 ? max([a:line1, 1]) : 1)
-    let l:endLine = (a:line2 ? min([a:line2, line('$')]) : line('$'))
-    " If the end of range is in a closed fold, Vim processes all lines inside
-    " the fold, even when '.' or a fixed line number has been specified. We
-    " correct the end line merely for output cosmetics, as the calculation is
-    " not affected by this.
-    let l:endLine = (foldclosed(l:endLine) == -1 ? l:endLine : foldclosedend(l:endLine))
+function! s:ReportMultiple( results )
+    for [l:isSuccessful, l:range, l:evaluationText, l:matchRange, l:patternMessage] in a:results
+	echomsg l:range . l:evaluationText . l:matchRange . l:patternMessage
+	redraw
+    endfor
+
+    for [l:isSuccessful, l:range, l:evaluationText, l:matchRange, l:patternMessage] in a:results
+	call s:EchoResult(l:isSuccessful, l:range, l:evaluationText, l:matchRange, l:patternMessage)
+    endfor
+    return 1
+endfunction
+function! s:SearchAndEvaluate( line1, line2, pattern, isLiteral )
+    " If the start / end of range is in a closed fold, Vim processes all lines
+    " inside the fold, even when '.' or a fixed line number has been specified.
+    " We correct the merely for output cosmetics, as the calculation is not
+    " affected by this.
+    let [l:startLnum, l:endLnum] = [ingo#range#NetStart(a:line1 ? max([a:line1, 1]) : 1), ingo#range#NetEnd(a:line2 ? min([a:line2, line('$')]) : line('$'))]
 "****D echomsg '****' a:line1 a:line2
-"****D echomsg '****' l:startLine l:endLine
+"****D echomsg '****' l:startLnum l:endLnum
 
     " Skip processing if there is no pattern.
     if empty(a:pattern) && (a:isLiteral || empty(@/))
@@ -275,7 +323,7 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
     let l:cursorLine = line('.')
     let l:cursorVirtCol = virtcol('.')
     let l:isCursorOnClosedFold = (foldclosed(l:cursorLine) != -1)
-    let l:isCursorInsideRange = (l:cursorLine >= l:startLine && l:cursorLine <= l:endLine)
+    let l:isCursorInsideRange = (l:cursorLine >= l:startLnum && l:cursorLine <= l:endLnum)
 
     " This triple records matches relative to the current line or current closed
     " fold.
@@ -283,13 +331,13 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
     let [l:matchesCurrent, l:firstLnumCurrent, l:lastLnumCurrent] = [0, 0x7FFFFFFF, 0]
     let [l:matchesAfter, l:firstLnumAfter, l:lastLnumAfter]       = [0, 0x7FFFFFFF, 0]
 
-    if l:cursorLine >= l:startLine
+    if l:cursorLine >= l:startLnum
 	let l:lineBeforeCurrent = (l:isCursorInsideRange ?
 	\   (l:isCursorOnClosedFold ? foldclosed(l:cursorLine) : l:cursorLine) - 1 :
-	\   l:endLine
+	\   l:endLnum
 	\)
-	if l:lineBeforeCurrent >= l:startLine
-	    let [l:matchesBefore, l:firstLnumBefore, l:lastLnumBefore] = s:GetMatchesStats(l:startLine . ',' . l:lineBeforeCurrent, a:pattern)
+	if l:lineBeforeCurrent >= l:startLnum
+	    let [l:matchesBefore, l:firstLnumBefore, l:lastLnumBefore] = s:GetMatchesStats(l:startLnum . ',' . l:lineBeforeCurrent, a:pattern)
 	endif
     endif
 
@@ -301,13 +349,13 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
 	let [l:matchesCurrent, l:firstLnumCurrent, l:lastLnumCurrent] = s:GetMatchesStats('.', a:pattern)
     endif
 
-    if l:cursorLine <= l:endLine
+    if l:cursorLine <= l:endLnum
 	let l:lineAfterCurrent = (l:isCursorInsideRange ?
 	\   (l:isCursorOnClosedFold ? foldclosedend(l:cursorLine) : l:cursorLine) + 1 :
-	\   l:startLine
+	\   l:startLnum
 	\)
-	if l:lineAfterCurrent <= l:endLine
-	    let [l:matchesAfter, l:firstLnumAfter, l:lastLnumAfter] = s:GetMatchesStats(l:lineAfterCurrent . ',' . l:endLine, a:pattern)
+	if l:lineAfterCurrent <= l:endLnum
+	    let [l:matchesAfter, l:firstLnumAfter, l:lastLnumAfter] = s:GetMatchesStats(l:lineAfterCurrent . ',' . l:endLnum, a:pattern)
 	endif
     endif
 
@@ -387,10 +435,69 @@ function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
 "****D echomsg '****' l:before '/' l:exact '/' l:after
     endif
 
-    return s:Report(l:startLine, l:endLine, a:pattern,
+    return [
+    \   l:startLnum, l:endLnum,
     \   l:firstLnum, l:lastLnum,
     \   s:Evaluate([l:matchesBefore, l:matchesCurrent, l:matchesAfter, l:before, l:exact, l:after])
+    \]
+endfunction
+function! SearchPosition#SearchPosition( line1, line2, pattern, isLiteral )
+    let [
+    \   l:startLnum, l:endLnum,
+    \   l:firstLnum, l:lastLnum,
+    \   l:evaluation
+    \] = s:SearchAndEvaluate(a:line1, a:line2, a:pattern, a:isLiteral)
+
+    let [l:isSuccessful, l:range, l:evaluationText, l:matchRange, l:patternMessage] = s:GetReport(
+    \   l:startLnum, l:endLnum,
+    \   a:pattern,
+    \   l:firstLnum, l:lastLnum,
+    \   l:evaluation
     \)
+
+    return s:Report(l:isSuccessful, l:range, l:evaluationText, l:matchRange, l:patternMessage)
+endfunction
+function! SearchPosition#SearchPositionMultiple( line1, line2, arguments )
+    let l:patterns = []
+    let l:arguments = a:arguments
+    while ! empty(l:arguments)
+	let [l:unescapedPattern, l:arguments] = ingo#cmdargs#pattern#ParseUnescaped(l:arguments, '\%(,\s*\(\%([[:alnum:]\\"|]\@![\x00-\xFF]\).*\)\)\?')
+	call add(l:patterns, l:unescapedPattern)
+    endwhile
+
+    if len(l:patterns) == 1 && l:patterns[0] ==# a:arguments
+	" No /.../,/.../ delimiters given; this is a list of literal whole
+	" words.
+	let l:patterns = map(
+	\   split(a:arguments, ','),
+	\   'ingo#regexp#FromLiteralText(v:val, 1, "")'
+	\)
+    endif
+
+    call filter(l:patterns, '! empty(v:val)')
+
+    if len(l:patterns) < 2
+	call ingo#err#Set('Must pass at least two (comma-separated) {pattern}')
+	return 0
+    endif
+
+    let l:results = []
+    for l:pattern in l:patterns
+	let [
+	\   l:startLnum, l:endLnum,
+	\   l:firstLnum, l:lastLnum,
+	\   l:evaluation
+	\] = s:SearchAndEvaluate(a:line1, a:line2, l:pattern, 0)
+
+	call add(l:results, s:GetReport(
+	\   l:startLnum, l:endLnum,
+	\   l:pattern,
+	\   l:firstLnum, l:lastLnum,
+	\   l:evaluation
+	\))
+    endfor
+
+    return s:ReportMultiple(l:results)
 endfunction
 
 function! SearchPosition#SavePosition()

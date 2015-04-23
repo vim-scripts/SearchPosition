@@ -39,6 +39,14 @@ USAGE
                         in relation to the current cursor position is echoed
                         to the command line.
 
+:[range]SearchPositionMultiple /{pattern1}/,/{pattern2}/[,...]
+:[range]SearchPositionMultiple {word1},{word2}[,...]
+                        Show positions and tallies of the search results for
+                        {pattern1}, {pattern2}, ... Without [/] delimiters,
+                        only literal whole {word1}, {word2}, ... are matched.
+                        :search-args Useful to compare the number of
+                        occurrences for multiple variants.
+
 <Leader><A-n>{motion}   Show position for the last search pattern in the
                         lines covered by {motion}.
 [count]<A-n>            Show position for the last search pattern in the
